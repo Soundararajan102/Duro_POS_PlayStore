@@ -53,6 +53,8 @@ DESIGN.md
 *.p8
 *.p12
 *.mobileprovision
+keys.txt
+*.keystore
 
 # Logs and local process files
 logs/

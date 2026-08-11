@@ -43,7 +43,7 @@ const config = {
   },
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "com.anonymous.brolier360",
+    bundleIdentifier: "com.durozen.brolier360",
   },
   android: {
     adaptiveIcon: {
@@ -69,7 +69,7 @@ const config = {
       "android.permission.ACCESS_FINE_LOCATION",
       "android.permission.READ_MEDIA_IMAGES",
     ],
-    package: "com.anonymous.brolier360",
+    package: "com.durozen.brolier360",
   },
   web: {},
   plugins: [

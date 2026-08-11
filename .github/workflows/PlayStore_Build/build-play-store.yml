@@ -1,0 +1,158 @@
+name: Build Android App Bundle (AAB)
+
+on:
+  push:
+    branches:
+      - prod
+      - dev
+    paths:
+      - "frontend/**"
+      - ".github/workflows/build-play-store.yml"
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: Override EXPO_PUBLIC_API_BASE_URL for this run (optional)
+        type: string
+        required: false
+
+concurrency:
+  group: aab-build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  JAVA_VERSION: "17"
+  PYTHON_VERSION: "3.12"
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Xmx4096m
+  AAB_OUTPUT: frontend/android/app/build/outputs/bundle/release/app-release.aab
+
+jobs:
+  build-android:
+    name: Build Android AAB (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Resolve API base URL from secrets
+        id: config
+        working-directory: .
+        env:
+          SECRET_API_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+          SECRET_CADDY_HOST: ${{ secrets.CADDY_PUBLIC_HOST }}
+          INPUT_API_URL: ${{ github.event.inputs.api_base_url }}
+        run: |
+          if [[ -n "$INPUT_API_URL" ]]; then
+            API_URL="$INPUT_API_URL"
+          elif [[ -n "$SECRET_API_URL" ]]; then
+            API_URL="$SECRET_API_URL"
+          elif [[ -n "$SECRET_CADDY_HOST" ]]; then
+            API_URL="https://${SECRET_CADDY_HOST}"
+          else
+            echo "Set EXPO_PUBLIC_API_BASE_URL or CADDY_PUBLIC_HOST in GitHub secrets." >&2
+            exit 1
+          fi
+          if [[ ! "$API_URL" =~ ^https?:// ]]; then
+            echo "API base URL must start with http:// or https://" >&2
+            exit 1
+          fi
+          echo "EXPO_PUBLIC_API_BASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('frontend/lock.yaml', 'frontend/package.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python deps for icon generation
+        run: pip install pillow
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('frontend/lock.yaml', 'frontend/app.config.js') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Prebuild and compile AAB
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ env.EXPO_PUBLIC_API_BASE_URL }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bun run build:aab
+
+      - name: Verify AAB output
+        working-directory: .
+        run: |
+          AAB="${{ env.AAB_OUTPUT }}"
+          if [[ ! -f "$AAB" ]]; then
+            echo "AAB not found at $AAB" >&2
+            exit 1
+          fi
+          ls -lh "$AAB"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: meat-billing-pos-${{ github.ref_name }}-${{ github.run_number }}-aab
+          path: ${{ env.AAB_OUTPUT }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build summary
+        if: success()
+        working-directory: .
+        run: |
+          {
+            echo "## Android AAB build"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Branch | \`${{ github.ref_name }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| API URL | \`${{ steps.config.outputs.api_url }}\` |"
+            echo "| AAB size | $(du -h "${{ env.AAB_OUTPUT }}" | cut -f1) |"
+            echo ""
+            echo "Download the Android App Bundle (.aab) from the **Artifacts** section of this workflow run."
+          } >> "$GITHUB_STEP_SUMMARY"
