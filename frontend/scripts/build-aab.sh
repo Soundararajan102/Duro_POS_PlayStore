@@ -22,7 +22,7 @@ bunx expo prebuild --platform android --clean
 
 if [[ -n "${ANDROID_KEYSTORE_BASE64:-}" ]]; then
   echo "Setting up production keystore..."
-  echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/upload.keystore
+  echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload.keystore
   cat <<EOF > android/keystore.properties
 storeFile=upload.keystore
 keyAlias=$ANDROID_KEY_ALIAS
