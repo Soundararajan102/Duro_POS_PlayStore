@@ -5,6 +5,7 @@ on:
     branches:
       - prod
       - dev
+      - master
     paths:
       - "frontend/**"
       - ".github/workflows/build-play-store.yml"
