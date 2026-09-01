@@ -31,7 +31,7 @@ const androidIconMonochrome = "./assets/images/android-icon-monochrome.png";
 const config = {
   name: "Brolier 360",
   slug: "brolier-360",
-  version: "1.0.0",
+  version: "1.0.1",
   orientation: "portrait",
   scheme: "brolier360",
   userInterfaceStyle: "light",
@@ -70,6 +70,7 @@ const config = {
       "android.permission.READ_MEDIA_IMAGES",
     ],
     package: "com.durozen.brolier360",
+    versionCode: 2,
   },
   web: {},
   plugins: [
