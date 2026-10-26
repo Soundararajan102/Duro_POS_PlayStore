@@ -31,7 +31,7 @@ const androidIconMonochrome = "./assets/images/android-icon-monochrome.png";
 const config = {
   name: "Brolier 360",
   slug: "brolier-360",
-  version: "1.0.1",
+  version: "1.0.2",
   orientation: "portrait",
   scheme: "brolier360",
   userInterfaceStyle: "light",
@@ -67,10 +67,16 @@ const config = {
       "android.permission.BLUETOOTH_SCAN",
       "android.permission.BLUETOOTH_CONNECT",
       "android.permission.ACCESS_FINE_LOCATION",
+    ],
+    blockedPermissions: [
       "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.READ_MEDIA_AUDIO",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.WRITE_EXTERNAL_STORAGE",
     ],
     package: "com.durozen.brolier360",
-    versionCode: 2,
+    versionCode: 3,
   },
   web: {},
   plugins: [
@@ -88,6 +94,8 @@ const config = {
       "expo-image-picker",
       {
         photosPermission: "Allow Brolier 360 to choose item images for catalogue and shop items.",
+        cameraPermission: false,
+        microphonePermission: false,
       },
     ],
   ],
