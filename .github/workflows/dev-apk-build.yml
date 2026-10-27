@@ -1,0 +1,157 @@
+name: Build Android Development Client APK (Expo Dev Client)
+
+on:
+  push:
+    branches:
+      - prod
+      - dev
+      - master
+    paths:
+      - "frontend/**"
+      - ".github/workflows/dev-apk-build.yml"
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: Override EXPO_PUBLIC_API_BASE_URL for this run (optional)
+        type: string
+        required: false
+
+concurrency:
+  group: dev-apk-build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  JAVA_VERSION: "17"
+  PYTHON_VERSION: "3.12"
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Xmx4096m
+  APK_OUTPUT: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+
+jobs:
+  build-dev-client:
+    name: Build Android Dev Client APK (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Resolve API base URL from secrets or fallback
+        id: config
+        working-directory: .
+        env:
+          SECRET_API_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+          SECRET_CADDY_HOST: ${{ secrets.CADDY_PUBLIC_HOST }}
+          INPUT_API_URL: ${{ github.event.inputs.api_base_url }}
+        run: |
+          if [[ -n "$INPUT_API_URL" ]]; then
+            API_URL="$INPUT_API_URL"
+          elif [[ -n "$SECRET_API_URL" ]]; then
+            API_URL="$SECRET_API_URL"
+          elif [[ -n "$SECRET_CADDY_HOST" ]]; then
+            API_URL="https://${SECRET_CADDY_HOST}"
+          else
+            API_URL="http://localhost:8000"
+          fi
+          echo "EXPO_PUBLIC_API_BASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Cache Bun packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('frontend/lock.yaml', 'frontend/package.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python deps for icon generation
+        run: pip install pillow
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('frontend/lock.yaml', 'frontend/app.config.js') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Prebuild and compile Development Client APK
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ env.EXPO_PUBLIC_API_BASE_URL }}
+        run: bun run build:dev-apk
+
+      - name: Verify APK output
+        working-directory: .
+        run: |
+          APK="${{ env.APK_OUTPUT }}"
+          if [[ ! -f "$APK" ]]; then
+            echo "Dev APK not found at $APK" >&2
+            exit 1
+          fi
+          ls -lh "$APK"
+
+      - name: Upload Development APK artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: brolier360-dev-client-${{ github.ref_name }}-${{ github.run_number }}
+          path: ${{ env.APK_OUTPUT }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build summary
+        if: success()
+        working-directory: .
+        run: |
+          {
+            echo "## Android Development Client APK (Custom Expo Go)"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Branch | \`${{ github.ref_name }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| API URL | \`${{ steps.config.outputs.api_url }}\` |"
+            echo "| APK size | $(du -h "${{ env.APK_OUTPUT }}" | cut -f1) |"
+            echo ""
+            echo "### How to use this APK:"
+            echo "1. Download and install \`app-debug.apk\` from the **Artifacts** section below."
+            echo "2. Start your Metro bundler on your development machine:"
+            echo "   \`\`\`bash"
+            echo "   cd frontend"
+            echo "   npm run start:dev"
+            echo "   \`\`\`"
+            echo "3. Open the installed app on your phone and connect via QR code or your computer's local IP address."
+          } >> "$GITHUB_STEP_SUMMARY"

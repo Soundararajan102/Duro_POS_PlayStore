@@ -35,6 +35,7 @@
     "test:auth": "AUTH_UTILS_SELF_CHECK=1 npx --yes tsx src/utils/api-request-path.ts && AUTH_UTILS_SELF_CHECK=1 npx --yes tsx src/utils/auth-errors.ts && JWT_SELF_CHECK=1 npx --yes tsx src/utils/jwt.ts && API_ERRORS_SELF_CHECK=1 npx --yes tsx src/api/api-errors.ts",
     "icons:android": "python3 ./scripts/generate-android-icons.py",
     "build:apk": "bash ./scripts/build-apk.sh",
+    "build:dev-apk": "bash ./scripts/build-dev-apk.sh",
     "build:aab": "bash ./scripts/build-aab.sh"
   },
   "dependencies": {
